@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Hệ Thống Thi Trực Tuyến</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { --primary: #2563eb; }
+  .sidebar-link { @apply flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-blue-700 hover:text-white transition-all cursor-pointer; }
+  .sidebar-link.active { @apply bg-blue-700 text-white; }
+  #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast { padding: 0.75rem 1.25rem; border-radius: 0.5rem; color: white; font-size: 0.875rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideIn 0.3s ease; max-width: 320px; }
+  .toast.success { background: #16a34a; }
+  .toast.error { background: #dc2626; }
+  .toast.info { background: #2563eb; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-box { background: white; border-radius: 0.75rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+  .drag-area { border: 2px dashed #93c5fd; border-radius: 0.5rem; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .drag-area.dragover { background: #eff6ff; border-color: #2563eb; }
+  @media (max-width: 768px) {
+    #sidebar { display: none; }
+    #mobile-nav { display: flex; }
+    #main-content { margin-left: 0 !important; padding-bottom: 4.5rem; }
+  }
+  @media (min-width: 769px) {
+    #mobile-nav { display: none; }
+  }
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen" class="min-h-screen flex items-center justify-center p-4" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3">🎓</div>
+      <h1 class="text-2xl font-bold text-gray-800">Hệ Thống Thi Trực Tuyến</h1>
+      <p class="text-gray-500 mt-1">Quản Trị Admin</p>
+    </div>
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-1">GAS Backend URL</label>
+      <div class="flex gap-2">
+        <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/..." 
+          class="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button onclick="saveGasUrl()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Lưu</button>
+      </div>
+      <div id="url-status" class="mt-2 text-sm flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-gray-300 inline-block"></span>
+        <span class="text-gray-500">Chưa kết nối</span>
+      </div>
+    </div>
+    <div class="border-t pt-6">
+      <label class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu Admin</label>
+      <input id="login-password" type="password" placeholder="Nhập mật khẩu..."
+        class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+        onkeydown="if(event.key==='Enter')doLogin()">
+      <button id="login-btn" onclick="doLogin()" class="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center gap-2">
+        Đăng nhập
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" style="display:none">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed left-0 top-0 h-full w-56 bg-blue-800 text-white flex flex-col z-50">
+    <div class="p-5 border-b border-blue-700">
+      <div class="font-bold text-lg">🎓 Admin Panel</div>
+      <div class="text-blue-300 text-xs mt-1" id="sidebar-title">Hệ Thống Thi</div>
+    </div>
+    <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+      <div class="sidebar-link active" onclick="switchTab('overview')" data-tab="overview">
+        <span>📊</span><span>Tổng quan</span>
+      </div>
+      <div class="sidebar-link" onclick="switchTab('config')" data-tab="config">
+        <span>⚙️</span><span>Cấu hình</span>
+      </div>
+      <div class="sidebar-link" onclick="switchTab('units')" data-tab="units">
+        <span>🏢</span><span>Đơn vị</span>
+      </div>
+      <div class="sidebar-link" onclick="switchTab('questions')" data-tab="questions">
+        <span>📝</span><span>Ngân hàng đề</span>
+      </div>
+      <div class="sidebar-link" onclick="switchTab('results')" data-tab="results">
+        <span>🏆</span><span>Kết quả thi</span>
+      </div>
+      <div class="sidebar-link" onclick="switchTab('reset')" data-tab="reset">
+        <span>🗑️</span><span>Reset</span>
+      </div>
+    </nav>
+    <div class="p-3 border-t border-blue-700">
+      <button onclick="doLogout()" class="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg text-blue-300 hover:bg-blue-700 hover:text-white transition-all text-sm">
+        <span>🚪</span><span>Đăng xuất</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile bottom nav -->
+  <nav id="mobile-nav" class="fixed bottom-0 left-0 right-0 bg-blue-800 text-white flex z-50 border-t border-blue-700">
+    <button class="flex-1 py-2 text-center text-xs flex flex-col items-center gap-0.5 text-blue-300 hover:text-white" onclick="switchTab('overview')">
+      <span class="text-lg">📊</span><span>Tổng quan</span>
+    </button>
+    <button class="flex-1 py-2 text-center text-xs flex flex-col items-center gap-0.5 text-blue-300 hover:text-white" onclick="switchTab('config')">
+      <span class="text-lg">⚙️</span><span>Cấu hình</span>
+    </button>
+    <button class="flex-1 py-2 text-center text-xs flex flex-col items-center gap-0.5 text-blue-300 hover:text-white" onclick="switchTab('units')">
+      <span class="text-lg">🏢</span><span>Đơn vị</span>
+    </button>
+    <button class="flex-1 py-2 text-center text-xs flex flex-col items-center gap-0.5 text-blue-300 hover:text-white" onclick="switchTab('questions')">
+      <span class="text-lg">📝</span><span>Đề</span>
+    </button>
+    <button class="flex-1 py-2 text-center text-xs flex flex-col items-center gap-0.5 text-blue-300 hover:text-white" onclick="switchTab('results')">
+      <span class="text-lg">🏆</span><span>Kết quả</span>
+    </button>
+  </nav>
+
+  <!-- Main content -->
+  <main id="main-content" class="ml-56 p-6 min-h-screen">
+
+    <!-- TAB: OVERVIEW -->
+    <div id="tab-overview" class="tab-content active">
+      <h2 class="text-xl font-bold text-gray-800 mb-5">📊 Tổng quan</h2>
+      <!-- Stats cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-3xl font-bold text-blue-600" id="stat-total">-</div>
+          <div class="text-sm text-gray-500 mt-1">Tổng bài thi</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-3xl font-bold text-green-600" id="stat-avg">-</div>
+          <div class="text-sm text-gray-500 mt-1">Điểm trung bình</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-3xl font-bold text-red-500" id="stat-violations">-</div>
+          <div class="text-sm text-gray-500 mt-1">Bài vi phạm</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-3xl font-bold text-yellow-500" id="stat-pending">-</div>
+          <div class="text-sm text-gray-500 mt-1">Chờ chấm TL</div>
+        </div>
+      </div>
+      <!-- Status + Leaderboard -->
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4">🔴 Trạng thái hệ thống</h3>
+          <div id="system-status" class="space-y-2 text-sm text-gray-600">
+            <div>Đang tải...</div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-700">🏆 Bảng xếp hạng</h3>
+            <div class="flex gap-1">
+              <button onclick="loadLeaderboard('week')" id="lb-week" class="px-3 py-1 text-xs rounded-full bg-blue-600 text-white">Tuần</button>
+              <button onclick="loadLeaderboard('month')" id="lb-month" class="px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-600">Tháng</button>
+            </div>
+          </div>
+          <div id="leaderboard-list" class="space-y-2 text-sm">
+            <div class="text-gray-400 text-center py-4">Đang tải...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: CONFIG -->
+    <div id="tab-config" class="tab-content">
+      <h2 class="text-xl font-bold text-gray-800 mb-5">⚙️ Cấu hình hệ thống</h2>
+      <form id="config-form" onsubmit="saveConfig(event)" class="space-y-5">
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4 pb-2 border-b">Thông tin cuộc thi</h3>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Tên cuộc thi</label>
+              <input type="text" name="title" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Subtitle</label>
+              <input type="text" name="subtitle" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-600 mb-1">URL Banner</label>
+              <input type="url" name="bannerUrl" placeholder="https://..." class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4 pb-2 border-b">Thời gian & giới hạn</h3>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Mở cổng thi</label>
+              <input type="datetime-local" name="openTime" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Đóng cổng thi</label>
+              <input type="datetime-local" name="closeTime" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Thời gian làm bài (phút)</label>
+              <input type="number" name="durationMinutes" min="5" max="180" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Số câu hỏi/đề</label>
+              <input type="number" name="questionCount" min="10" max="100" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Giới hạn thi/tuần</label>
+              <input type="number" name="weeklyLimit" min="1" max="20" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Giới hạn thi/tháng</label>
+              <input type="number" name="monthlyLimit" min="1" max="50" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4 pb-2 border-b">Thông tin tổ chức</h3>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Tên tổ chức</label>
+              <input type="text" name="org" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Số điện thoại</label>
+              <input type="text" name="phone" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-600 mb-1">Địa chỉ</label>
+              <input type="text" name="address" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-600 mb-1">Thể lệ cuộc thi</label>
+              <textarea name="rules" rows="4" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4 pb-2 border-b">Kết nối Google Sheets</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">URL Google Sheets (target sync)</label>
+              <div class="flex gap-2">
+                <input type="url" name="sheetsUrl" placeholder="https://docs.google.com/spreadsheets/d/..." class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <button type="button" onclick="testSheetsConnection()" class="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg text-sm border text-gray-700">Test</button>
+              </div>
+              <div id="sheets-test-result" class="text-xs mt-1 text-gray-500"></div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">GAS Backend URL (đổi endpoint)</label>
+              <div class="flex gap-2">
+                <input type="url" id="config-gas-url" placeholder="https://script.google.com/macros/s/..." class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <button type="button" onclick="saveGasUrlFromConfig()" class="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg text-sm border text-gray-700">Lưu</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-4 pb-2 border-b">Đổi mật khẩu Admin</h3>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Mật khẩu mới</label>
+              <input type="password" name="newPassword" placeholder="Để trống nếu không đổi" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">Xác nhận mật khẩu</label>
+              <input type="password" id="confirm-password" placeholder="Nhập lại mật khẩu mới" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" id="save-config-btn" class="bg-blue-600 text-white px-8 py-2.5 rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2">
+            Lưu cấu hình
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: UNITS -->
+    <div id="tab-units" class="tab-content">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-xl font-bold text-gray-800">🏢 Quản lý đơn vị</h2>
+        <button onclick="openUnitModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1.5">
+          <span>+</span> Thêm đơn vị
+        </button>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div id="units-list" class="divide-y">
+          <div class="p-8 text-center text-gray-400">Đang tải...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: QUESTIONS -->
+    <div id="tab-questions" class="tab-content">
+      <h2 class="text-xl font-bold text-gray-800 mb-5">📝 Ngân hàng đề thi</h2>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-3">Thống kê hiện tại</h3>
+          <div id="question-stats" class="space-y-2 text-sm text-gray-600">
+            <div class="text-gray-400">Đang tải...</div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h3 class="font-semibold text-gray-700 mb-3">Hướng dẫn định dạng file .txt</h3>
+          <pre class="text-xs bg-gray-50 p-3 rounded border text-gray-600 overflow-auto">===BỘ ĐỀ 1===
+Câu 1. Nội dung câu hỏi?
+A. Đáp án A
+B. Đáp án B
+C. Đáp án C
+D. Đáp án D
+Đáp án: A
+
+Câu 2. Câu hỏi tiếp theo?
+[Tự luận]
+...
+
+===BỘ ĐỀ 2===
+...</pre>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm mt-5">
+        <h3 class="font-semibold text-gray-700 mb-4">Upload ngân hàng đề</h3>
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Số bộ đề (2-5)</label>
+            <input type="number" id="q-set-count" value="2" min="2" max="5" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Số câu/bộ (30-50)</label>
+            <input type="number" id="q-per-set" value="30" min="30" max="50" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+        <div id="drag-area" class="drag-area mb-4">
+          <div class="text-4xl mb-2">📄</div>
+          <p class="text-gray-500 text-sm">Kéo thả file .txt vào đây hoặc</p>
+          <label class="mt-2 inline-block bg-blue-50 text-blue-600 px-4 py-1.5 rounded-lg text-sm cursor-pointer hover:bg-blue-100">
+            Chọn file
+            <input type="file" id="q-file-input" accept=".txt" class="hidden" onchange="handleFileSelect(this)">
+          </label>
+        </div>
+        <div id="parse-result" class="hidden mb-4 p-4 rounded-lg border text-sm"></div>
+        <button id="upload-q-btn" onclick="uploadQuestions()" class="hidden bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+          <span>⬆️</span> Upload lên hệ thống
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: RESULTS -->
+    <div id="tab-results" class="tab-content">
+      <h2 class="text-xl font-bold text-gray-800 mb-5">🏆 Kết quả thi</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-2xl font-bold text-blue-600" id="r-stat-total">-</div>
+          <div class="text-xs text-gray-500 mt-1">Tổng bài</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-2xl font-bold text-green-600" id="r-stat-avg">-</div>
+          <div class="text-xs text-gray-500 mt-1">Điểm TB</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-2xl font-bold text-red-500" id="r-stat-vio">-</div>
+          <div class="text-xs text-gray-500 mt-1">Vi phạm</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+          <div class="text-2xl font-bold text-yellow-500" id="r-stat-essay">-</div>
+          <div class="text-xs text-gray-500 mt-1">Chờ chấm TL</div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+        <div class="flex flex-wrap gap-3 items-center">
+          <input type="text" id="results-search" placeholder="🔍 Tìm theo tên, CCCD, đơn vị..." 
+            class="flex-1 min-w-48 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" oninput="filterResults()">
+          <select id="results-filter" onchange="filterResults()" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="">Tất cả</option>
+            <option value="violation">Có vi phạm</option>
+            <option value="essay">Cần chấm TL</option>
+          </select>
+          <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">📥 Export CSV</button>
+          <button onclick="syncSheets()" id="sync-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center gap-1.5">
+            🔄 Đồng bộ Sheets
+          </button>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+            <tr>
+              <th class="px-4 py-3 text-left">Họ tên</th>
+              <th class="px-4 py-3 text-left">CCCD</th>
+              <th class="px-4 py-3 text-left">Đơn vị</th>
+              <th class="px-4 py-3 text-center">Điểm</th>
+              <th class="px-4 py-3 text-left">Thời gian</th>
+              <th class="px-4 py-3 text-center">Vi phạm</th>
+              <th class="px-4 py-3 text-center">Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: RESET -->
+    <div id="tab-reset" class="tab-content">
+      <h2 class="text-xl font-bold text-gray-800 mb-5">🗑️ Reset dữ liệu</h2>
+      <div class="bg-white rounded-xl p-6 shadow-sm max-w-lg">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-5">
+          <p class="text-red-700 text-sm font-medium">⚠️ Cảnh báo: Thao tác này không thể hoàn tác!</p>
+          <p class="text-red-600 text-xs mt-1">Dữ liệu sẽ bị xóa vĩnh viễn khỏi Google Sheets.</p>
+        </div>
+        <div class="space-y-3 mb-5">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="reset-results" class="w-4 h-4 text-red-600">
+            <span class="text-sm text-gray-700">Xóa kết quả thi (RESULTS)</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="reset-sessions" class="w-4 h-4 text-red-600">
+            <span class="text-sm text-gray-700">Xóa phiên thi (SESSIONS)</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="reset-violations" class="w-4 h-4 text-red-600">
+            <span class="text-sm text-gray-700">Xóa vi phạm (VIOLATIONS)</span>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="reset-users" class="w-4 h-4 text-red-600">
+            <span class="text-sm text-gray-700">Xóa thí sinh (USERS)</span>
+          </label>
+        </div>
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nhập xác nhận</label>
+          <input type="text" id="reset-confirm" placeholder="XAC NHAN RESET" 
+            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:outline-none font-mono">
+          <p class="text-xs text-gray-400 mt-1">Gõ chính xác: XAC NHAN RESET</p>
+        </div>
+        <button onclick="doReset()" id="reset-btn" class="w-full bg-red-600 text-white py-2.5 rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2">
+          🗑️ Thực hiện Reset
+        </button>
+      </div>
+    </div>
+
+  </main><!-- end main-content -->
+</div><!-- end dashboard -->
+
+<!-- MODAL: UNIT -->
+<div id="unit-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="p-5 border-b flex items-center justify-between">
+      <h3 class="font-semibold text-gray-800" id="unit-modal-title">Thêm đơn vị</h3>
+      <button onclick="closeModal('unit-modal')" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <input type="hidden" id="unit-id">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Tên đơn vị <span class="text-red-500">*</span></label>
+        <input type="text" id="unit-name" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Nhập tên đơn vị...">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Đơn vị cha (tùy chọn)</label>
+        <select id="unit-parent" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <option value="">-- Không có --</option>
+        </select>
+      </div>
+    </div>
+    <div class="p-5 border-t flex gap-3 justify-end">
+      <button onclick="closeModal('unit-modal')" class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Hủy</button>
+      <button onclick="saveUnit()" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: RESULT DETAIL -->
+<div id="detail-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:700px">
+    <div class="p-5 border-b flex items-center justify-between">
+      <h3 class="font-semibold text-gray-800">Chi tiết bài thi</h3>
+      <button onclick="closeModal('detail-modal')" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="p-5" id="detail-content">
+      <div class="text-center text-gray-400 py-8">Đang tải...</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GRADE ESSAY -->
+<div id="grade-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="p-5 border-b flex items-center justify-between">
+      <h3 class="font-semibold text-gray-800">Chấm điểm tự luận</h3>
+      <button onclick="closeModal('grade-modal')" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <input type="hidden" id="grade-result-id">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Bài tự luận</label>
+        <div id="grade-essay-text" class="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700 max-h-40 overflow-y-auto"></div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Điểm tự luận (0-10)</label>
+        <input type="number" id="grade-score" min="0" max="10" step="0.5" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Nhận xét</label>
+        <textarea id="grade-comment" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Nhận xét (tùy chọn)..."></textarea>
+      </div>
+    </div>
+    <div class="p-5 border-t flex gap-3 justify-end">
+      <button onclick="closeModal('grade-modal')" class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Hủy</button>
+      <button onclick="submitGrade()" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700">Lưu điểm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  API & AUTH
+// ============================================================
+function getGasUrl() {
+  return localStorage.getItem('GAS_URL') || '';
+}
+
+async function api(action, data = {}) {
+  const url = getGasUrl();
+  if (!url) throw new Error('Chưa cấu hình GAS URL');
+  const payload = encodeURIComponent(JSON.stringify({ ...data, action }));
+  const res = await fetch(`${url}?action=${action}&payload=${payload}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return json;
+}
+
+function getToken() {
+  return sessionStorage.getItem('admin_token') || '';
+}
+
+function setToken(t) {
+  sessionStorage.setItem('admin_token', t);
+}
+
+function clearToken() {
+  sessionStorage.removeItem('admin_token');
+}
+
+// ============================================================
+//  TOAST
+// ============================================================
+function showToast(msg, type = 'info', duration = 3500) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => c.removeChild(t), 300); }, duration);
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> Đang xử lý...';
+    btn.disabled = true;
+  } else {
+    if (btn.dataset.orig) btn.innerHTML = btn.dataset.orig;
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const gasUrl = getGasUrl();
+  if (gasUrl) document.getElementById('gas-url-input').value = gasUrl;
+  document.getElementById('config-gas-url') && (document.getElementById('config-gas-url').value = gasUrl);
+
+  const token = getToken();
+  if (token && gasUrl) {
+    // Try to verify token by loading config
+    showDashboard();
+    loadAllData();
+  } else {
+    showSetup();
+  }
+});
+
+function showSetup() {
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+}
+
+function showDashboard() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+}
+
+// ============================================================
+//  SETUP / LOGIN
+// ============================================================
+function saveGasUrl() {
+  const url = document.getElementById('gas-url-input').value.trim();
+  if (!url) { showToast('Vui lòng nhập URL', 'error'); return; }
+  localStorage.setItem('GAS_URL', url);
+  if (document.getElementById('config-gas-url')) document.getElementById('config-gas-url').value = url;
+  updateUrlStatus('connecting');
+  // Test connection
+  api('getConfig', {}).then(() => {
+    updateUrlStatus('ok');
+    showToast('Kết nối thành công!', 'success');
+  }).catch(err => {
+    updateUrlStatus('error');
+    showToast('Lỗi kết nối: ' + err.message, 'error');
+  });
+}
+
+function saveGasUrlFromConfig() {
+  const url = document.getElementById('config-gas-url').value.trim();
+  if (!url) { showToast('Vui lòng nhập URL', 'error'); return; }
+  localStorage.setItem('GAS_URL', url);
+  document.getElementById('gas-url-input').value = url;
+  showToast('Đã lưu GAS URL', 'success');
+}
+
+function updateUrlStatus(state) {
+  const el = document.getElementById('url-status');
+  if (!el) return;
+  const map = {
+    ok: ['bg-green-500', 'Đã kết nối'],
+    error: ['bg-red-500', 'Lỗi kết nối'],
+    connecting: ['bg-yellow-400', 'Đang kiểm tra...'],
+  };
+  const [color, text] = map[state] || ['bg-gray-300', 'Chưa kết nối'];
+  el.innerHTML = `<span class="w-2 h-2 rounded-full ${color} inline-block"></span><span class="text-gray-600">${text}</span>`;
+}
+
+async function doLogin() {
+  const pw = document.getElementById('login-password').value;
+  if (!pw) { showToast('Vui lòng nhập mật khẩu', 'error'); return; }
+  setLoading('login-btn', true);
+  try {
+    const res = await api('adminLogin', { password: pw });
+    setToken(res.token);
+    showDashboard();
+    showToast('Đăng nhập thành công!', 'success');
+    loadAllData();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    setLoading('login-btn', false);
+  }
+}
+
+function doLogout() {
+  clearToken();
+  showSetup();
+  showToast('Đã đăng xuất', 'info');
+}
+
+// ============================================================
+//  TABS
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('[data-tab]').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => el.classList.add('active'));
+  // Lazy load
+  if (tab === 'units') loadUnits();
+  if (tab === 'questions') loadQuestionStats();
+  if (tab === 'results') loadResults();
+  if (tab === 'config') loadConfigForm();
+  if (tab === 'overview') loadOverview();
+}
+
+// ============================================================
+//  LOAD ALL DATA
+// ============================================================
+function loadAllData() {
+  loadOverview();
+  loadConfigForm();
+}
+
+// ============================================================
+//  OVERVIEW
+// ============================================================
+async function loadOverview() {
+  try {
+    const [cfg, lb] = await Promise.all([
+      api('getConfig', {}),
+      api('getLeaderboard', { period: 'week' })
+    ]);
+    updateSystemStatus(cfg);
+    renderLeaderboard(lb.list, 'week');
+
+    // Load results for stats
+    const token = getToken();
+    if (token) {
+      try {
+        const r = await api('adminGetResults', { adminToken: token });
+        const results = r.results || [];
+        const scores = results.filter(x => x.score !== null && x.score !== '').map(x => parseFloat(x.score));
+        const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '-';
+        const vio = results.filter(x => parseInt(x.violationCount) > 0).length;
+        const pending = results.filter(x => x.hasEssay && !x.essayGraded).length;
+        document.getElementById('stat-total').textContent = results.length;
+        document.getElementById('stat-avg').textContent = avg;
+        document.getElementById('stat-violations').textContent = vio;
+        document.getElementById('stat-pending').textContent = pending;
+      } catch(e) {}
+    }
+  } catch (err) {
+    showToast('Lỗi tải dữ liệu: ' + err.message, 'error');
+  }
+}
+
+function updateSystemStatus(cfg) {
+  const now = new Date();
+  const open = cfg.openTime ? new Date(cfg.openTime) : null;
+  const close = cfg.closeTime ? new Date(cfg.closeTime) : null;
+  let statusHtml = '';
+
+  statusHtml += `<div class="flex justify-between"><span class="text-gray-500">Tên cuộc thi:</span><span class="font-medium">${cfg.title || '-'}</span></div>`;
+
+  let examStatus = '', color = 'gray';
+  if (!open && !close) { examStatus = 'Không giới hạn'; color = 'green'; }
+  else if (open && now < open) {
+    const diff = Math.round((open - now) / 60000);
+    examStatus = `Chưa mở (còn ${diff >= 1440 ? Math.floor(diff/1440)+'d ' : ''}${Math.floor(diff%1440/60)}h${diff%60}m)`;
+    color = 'yellow';
+  } else if (close && now > close) {
+    examStatus = 'Đã đóng'; color = 'red';
+  } else if (close) {
+    const diff = Math.round((close - now) / 60000);
+    examStatus = `Đang mở (đóng sau ${diff >= 1440 ? Math.floor(diff/1440)+'d ' : ''}${Math.floor(diff%1440/60)}h${diff%60}m)`;
+    color = 'green';
+  } else { examStatus = 'Đang mở'; color = 'green'; }
+
+  const colorMap = { green: 'text-green-600', yellow: 'text-yellow-600', red: 'text-red-600', gray: 'text-gray-600' };
+  statusHtml += `<div class="flex justify-between"><span class="text-gray-500">Trạng thái:</span><span class="font-medium ${colorMap[color]}">${examStatus}</span></div>`;
+  statusHtml += `<div class="flex justify-between"><span class="text-gray-500">Thời gian làm bài:</span><span>${cfg.durationMinutes || 30} phút</span></div>`;
+  statusHtml += `<div class="flex justify-between"><span class="text-gray-500">Số câu hỏi:</span><span>${cfg.questionCount || 30} câu</span></div>`;
+  statusHtml += `<div class="flex justify-between"><span class="text-gray-500">Thí sinh:</span><span>${cfg.participantCount || 0}</span></div>`;
+  document.getElementById('system-status').innerHTML = statusHtml;
+  document.getElementById('sidebar-title').textContent = cfg.title || 'Hệ Thống Thi';
+}
+
+async function loadLeaderboard(period) {
+  document.getElementById('lb-week').className = period === 'week'
+    ? 'px-3 py-1 text-xs rounded-full bg-blue-600 text-white'
+    : 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-600';
+  document.getElementById('lb-month').className = period === 'month'
+    ? 'px-3 py-1 text-xs rounded-full bg-blue-600 text-white'
+    : 'px-3 py-1 text-xs rounded-full bg-gray-200 text-gray-600';
+  try {
+    const res = await api('getLeaderboard', { period });
+    renderLeaderboard(res.list, period);
+  } catch (err) {
+    showToast('Lỗi tải BXH: ' + err.message, 'error');
+  }
+}
+
+function renderLeaderboard(list, period) {
+  const el = document.getElementById('leaderboard-list');
+  if (!list || list.length === 0) { el.innerHTML = '<div class="text-gray-400 text-center py-4">Chưa có dữ liệu</div>'; return; }
+  el.innerHTML = list.slice(0, 10).map((r, i) => {
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+    return `<div class="flex items-center gap-2 py-1.5 border-b last:border-0">
+      <span class="w-7 text-center text-sm">${medal}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-gray-800 text-sm truncate">${esc(r.name)}</div>
+        <div class="text-xs text-gray-400 truncate">${esc(r.unit || '')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+//  CONFIG
+// ============================================================
+let _cfg = {};
+
+async function loadConfigForm() {
+  try {
+    const cfg = await api('getConfig', {});
+    _cfg = cfg;
+    const form = document.getElementById('config-form');
+    if (!form) return;
+    const fields = ['title','subtitle','bannerUrl','openTime','closeTime','durationMinutes',
+                    'questionCount','weeklyLimit','monthlyLimit','org','phone','address','rules','sheetsUrl'];
+    fields.forEach(key => {
+      const el = form.elements[key];
+      if (!el) return;
+      if (key === 'openTime' || key === 'closeTime') {
+        if (cfg[key]) {
+          // Convert to datetime-local format
+          const d = new Date(cfg[key]);
+          if (!isNaN(d)) {
+            const pad = n => String(n).padStart(2, '0');
+            el.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          }
+        }
+      } else {
+        el.value = cfg[key] !== undefined ? cfg[key] : '';
+      }
+    });
+    document.getElementById('config-gas-url').value = getGasUrl();
+  } catch (err) {
+    showToast('Lỗi tải cấu hình: ' + err.message, 'error');
+  }
+}
+
+async function saveConfig(e) {
+  e.preventDefault();
+  const token = getToken();
+  if (!token) { doLogout(); return; }
+
+  const form = e.target;
+  const newPw = form.elements['newPassword'].value.trim();
+  const confirmPw = document.getElementById('confirm-password').value.trim();
+  if (newPw && newPw !== confirmPw) { showToast('Mật khẩu xác nhận không khớp!', 'error'); return; }
+  if (newPw && newPw.length < 6) { showToast('Mật khẩu phải có ít nhất 6 ký tự', 'error'); return; }
+
+  const data = { adminToken: token };
+  ['title','subtitle','bannerUrl','openTime','closeTime','durationMinutes',
+   'questionCount','weeklyLimit','monthlyLimit','org','phone','address','rules','sheetsUrl'].forEach(key => {
+    if (form.elements[key]) data[key] = form.elements[key].value;
+  });
+  if (newPw) data.newPassword = newPw;
+
+  setLoading('save-config-btn', true);
+  try {
+    await api('adminSaveConfig', data);
+    showToast('Đã lưu cấu hình!', 'success');
+    form.elements['newPassword'].value = '';
+    document.getElementById('confirm-password').value = '';
+    loadOverview();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  } finally {
+    setLoading('save-config-btn', false);
+  }
+}
+
+async function testSheetsConnection() {
+  const token = getToken();
+  const url = document.querySelector('[name="sheetsUrl"]').value.trim();
+  if (!url) { showToast('Vui lòng nhập URL Sheets', 'error'); return; }
+  const el = document.getElementById('sheets-test-result');
+  el.textContent = 'Đang kiểm tra...';
+  el.className = 'text-xs mt-1 text-gray-500';
+  try {
+    const res = await api('adminTestSheets', { adminToken: token, sheetsUrl: url });
+    el.textContent = '✅ ' + res.message;
+    el.className = 'text-xs mt-1 text-green-600';
+  } catch (err) {
+    el.textContent = '❌ ' + err.message;
+    el.className = 'text-xs mt-1 text-red-600';
+  }
+}
+
+// ============================================================
+//  UNITS
+// ============================================================
+let _units = [];
+
+async function loadUnits() {
+  try {
+    const res = await api('getUnits', {});
+    _units = res.units || [];
+    renderUnits();
+  } catch (err) {
+    showToast('Lỗi tải đơn vị: ' + err.message, 'error');
+  }
+}
+
+function renderUnits() {
+  const el = document.getElementById('units-list');
+  if (!_units.length) { el.innerHTML = '<div class="p-8 text-center text-gray-400">Chưa có đơn vị nào</div>'; return; }
+
+  const parentMap = {};
+  _units.forEach(u => { parentMap[u.id] = u.name; });
+
+  el.innerHTML = _units.map(u => `
+    <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+      <div>
+        <span class="font-medium text-gray-800 text-sm">${esc(u.name)}</span>
+        ${u.parentId ? `<span class="text-xs text-gray-400 ml-2">← ${esc(parentMap[u.parentId] || u.parentId)}</span>` : '<span class="text-xs text-blue-400 ml-2">Cấp 1</span>'}
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openUnitModal('${esc(u.id)}')" class="text-xs text-blue-600 hover:underline px-2 py-1 rounded hover:bg-blue-50">Sửa</button>
+        <button onclick="deleteUnit('${esc(u.id)}')" class="text-xs text-red-500 hover:underline px-2 py-1 rounded hover:bg-red-50">Xóa</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openUnitModal(id) {
+  const modal = document.getElementById('unit-modal');
+  const parentSel = document.getElementById('unit-parent');
+
+  // Populate parent select
+  parentSel.innerHTML = '<option value="">-- Không có --</option>';
+  _units.forEach(u => {
+    if (u.id !== id) {
+      parentSel.innerHTML += `<option value="${esc(u.id)}">${esc(u.name)}</option>`;
+    }
+  });
+
+  if (id) {
+    const u = _units.find(x => x.id === id);
+    if (!u) return;
+    document.getElementById('unit-modal-title').textContent = 'Sửa đơn vị';
+    document.getElementById('unit-id').value = u.id;
+    document.getElementById('unit-name').value = u.name;
+    parentSel.value = u.parentId || '';
+  } else {
+    document.getElementById('unit-modal-title').textContent = 'Thêm đơn vị';
+    document.getElementById('unit-id').value = '';
+    document.getElementById('unit-name').value = '';
+    parentSel.value = '';
+  }
+  modal.classList.remove('hidden');
+}
+
+async function saveUnit() {
+  const token = getToken();
+  const name = document.getElementById('unit-name').value.trim();
+  if (!name) { showToast('Vui lòng nhập tên đơn vị', 'error'); return; }
+  const id = document.getElementById('unit-id').value;
+  const parentId = document.getElementById('unit-parent').value;
+  try {
+    await api('adminSaveUnit', { adminToken: token, id: id || undefined, name, parentId });
+    showToast('Đã lưu đơn vị!', 'success');
+    closeModal('unit-modal');
+    loadUnits();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  }
+}
+
+async function deleteUnit(id) {
+  if (!confirm('Xóa đơn vị này?')) return;
+  const token = getToken();
+  try {
+    await api('adminDeleteUnit', { adminToken: token, id });
+    showToast('Đã xóa đơn vị', 'success');
+    loadUnits();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  }
+}
+
+// ============================================================
+//  QUESTIONS
+// ============================================================
+let _parsedSets = null;
+
+async function loadQuestionStats() {
+  try {
+    const res = await api('getExamQuestions', { statsOnly: 'true' });
+    const s = res.stats || {};
+    document.getElementById('question-stats').innerHTML = `
+      <div class="flex justify-between py-1 border-b"><span class="text-gray-500">Tổng câu hỏi:</span><span class="font-semibold">${s.total || 0}</span></div>
+      <div class="flex justify-between py-1 border-b"><span class="text-gray-500">Số bộ đề:</span><span>${s.sets || 0}</span></div>
+      <div class="flex justify-between py-1 border-b"><span class="text-gray-500">Trắc nghiệm:</span><span>${s.mc || 0}</span></div>
+      <div class="flex justify-between py-1"><span class="text-gray-500">Tự luận:</span><span>${s.essay || 0}</span></div>
+    `;
+  } catch (err) {
+    document.getElementById('question-stats').innerHTML = '<div class="text-red-500 text-sm">Lỗi tải thống kê</div>';
+  }
+}
+
+// Drag & drop
+document.addEventListener('DOMContentLoaded', () => {
+  const area = document.getElementById('drag-area');
+  if (!area) return;
+  area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('dragover'); });
+  area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.txt')) parseFile(file);
+    else showToast('Vui lòng chọn file .txt', 'error');
+  });
+});
+
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (file) parseFile(file);
+}
+
+function parseFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => { parseQuestionText(e.target.result, file.name); };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseQuestionText(text, filename) {
+  const resultEl = document.getElementById('parse-result');
+  const uploadBtn = document.getElementById('upload-q-btn');
+  _parsedSets = null;
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const sets = [];
+  let currentSet = null;
+  let currentQ = null;
+  const errors = [];
+
+  function pushQuestion() {
+    if (currentQ && currentSet) {
+      if (!currentQ.question) { errors.push(`Câu hỏi không có nội dung ở bộ ${currentSet.setIndex}`); return; }
+      if (currentQ.type === 'multiple_choice') {
+        if (!currentQ.correctAnswer) errors.push(`Câu "${currentQ.question.substring(0,30)}..." thiếu đáp án`);
+      }
+      currentSet.questions.push(currentQ);
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // New set
+    if (/^===.*===/.test(line)) {
+      if (currentQ && currentSet) pushQuestion();
+      currentQ = null;
+      const setMatch = line.match(/(\d+)/);
+      const setIdx = setMatch ? parseInt(setMatch[1]) : sets.length + 1;
+      currentSet = { setIndex: String(setIdx), questions: [] };
+      sets.push(currentSet);
+      continue;
+    }
+    if (!currentSet) { currentSet = { setIndex: '1', questions: [] }; sets.push(currentSet); }
+
+    // New question
+    const qMatch = line.match(/^Câu\s+\d+[\.\)]\s*(.*)/i);
+    if (qMatch) {
+      pushQuestion();
+      const isEssay = qMatch[1].trim() === '' && lines[i+1] && lines[i+1].trim() === '[Tự luận]';
+      currentQ = {
+        id: 'q_' + Date.now() + '_' + Math.random().toString(36).substring(2,7),
+        setIndex: currentSet.setIndex,
+        question: qMatch[1].trim() || '',
+        type: 'multiple_choice',
+        optionA: '', optionB: '', optionC: '', optionD: '',
+        correctAnswer: ''
+      };
+      continue;
+    }
+
+    if (!currentQ) continue;
+
+    // Essay marker
+    if (line === '[Tự luận]') { currentQ.type = 'essay'; currentQ.correctAnswer = ''; continue; }
+
+    // Options
+    const optMatch = line.match(/^([ABCD])[\.]\s*(.*)/i);
+    if (optMatch) {
+      const opt = optMatch[1].toUpperCase();
+      if (opt === 'A') currentQ.optionA = optMatch[2];
+      else if (opt === 'B') currentQ.optionB = optMatch[2];
+      else if (opt === 'C') currentQ.optionC = optMatch[2];
+      else if (opt === 'D') currentQ.optionD = optMatch[2];
+      continue;
+    }
+
+    // Answer
+    const ansMatch = line.match(/^Đáp\s*án\s*:\s*([ABCD])/i);
+    if (ansMatch) { currentQ.correctAnswer = ansMatch[1].toUpperCase(); continue; }
+
+    // Continue question text
+    if (currentQ.question === '') currentQ.question = line;
+    else if (currentQ.type === 'essay') currentQ.question += '\n' + line;
+  }
+  pushQuestion();
+
+  // Summary
+  const totalQ = sets.reduce((s, set) => s + set.questions.length, 0);
+  const ok = totalQ > 0 && errors.length === 0;
+
+  let html = `<div class="font-medium mb-2 ${ok ? 'text-green-700' : 'text-orange-700'}">`;
+  html += ok ? '✅ Parse thành công!' : '⚠️ Parse có lỗi';
+  html += '</div>';
+  html += `<div class="text-gray-600">Số bộ đề: <strong>${sets.length}</strong> | Tổng câu hỏi: <strong>${totalQ}</strong></div>`;
+  html += `<div class="text-gray-500 text-xs mt-1">`;
+  sets.forEach(s => {
+    const mc = s.questions.filter(q => q.type === 'multiple_choice').length;
+    const essay = s.questions.filter(q => q.type === 'essay').length;
+    html += `Bộ ${s.setIndex}: ${s.questions.length} câu (${mc} TN, ${essay} TL) | `;
+  });
+  html += '</div>';
+  if (errors.length) {
+    html += `<div class="mt-2 text-red-600 text-xs"><strong>Lỗi:</strong><br>` + errors.slice(0, 5).map(esc).join('<br>') + '</div>';
+  }
+
+  resultEl.innerHTML = html;
+  resultEl.className = `mb-4 p-4 rounded-lg border text-sm ${ok ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`;
+  resultEl.classList.remove('hidden');
+
+  if (totalQ > 0) {
+    _parsedSets = sets;
+    uploadBtn.classList.remove('hidden');
+  } else {
+    uploadBtn.classList.add('hidden');
+  }
+}
+
+async function uploadQuestions() {
+  if (!_parsedSets) { showToast('Chưa có dữ liệu parse', 'error'); return; }
+  const token = getToken();
+  setLoading('upload-q-btn', true);
+  try {
+    const res = await api('adminUploadQuestions', { adminToken: token, questionSets: _parsedSets });
+    showToast(`Upload thành công ${res.total} câu hỏi!`, 'success');
+    _parsedSets = null;
+    document.getElementById('upload-q-btn').classList.add('hidden');
+    document.getElementById('q-file-input').value = '';
+    loadQuestionStats();
+  } catch (err) {
+    showToast('Lỗi upload: ' + err.message, 'error');
+  } finally {
+    setLoading('upload-q-btn', false);
+  }
+}
+
+// ============================================================
+//  RESULTS
+// ============================================================
+let _results = [];
+let _filteredResults = [];
+
+async function loadResults() {
+  const token = getToken();
+  const tbody = document.getElementById('results-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400"><span class="spinner inline-block border-gray-400 border-t-blue-600"></span> Đang tải...</td></tr>';
+  try {
+    const res = await api('adminGetResults', { adminToken: token });
+    _results = res.results || [];
+    _filteredResults = [..._results];
+    renderResultsTable();
+    updateResultsStats();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Lỗi: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function updateResultsStats() {
+  const scores = _results.filter(x => x.score !== null && x.score !== '').map(x => parseFloat(x.score));
+  document.getElementById('r-stat-total').textContent = _results.length;
+  document.getElementById('r-stat-avg').textContent = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(2) : '-';
+  document.getElementById('r-stat-vio').textContent = _results.filter(x => parseInt(x.violationCount)>0).length;
+  document.getElementById('r-stat-essay').textContent = _results.filter(x => x.hasEssay && !x.essayGraded).length;
+}
+
+function filterResults() {
+  const search = document.getElementById('results-search').value.trim().toLowerCase();
+  const filter = document.getElementById('results-filter').value;
+  _filteredResults = _results.filter(r => {
+    const matchText = !search || [r.name,r.cccd,r.unit].some(v => v && v.toLowerCase().includes(search));
+    const matchFilter = !filter
+      || (filter === 'violation' && parseInt(r.violationCount) > 0)
+      || (filter === 'essay' && r.hasEssay && !r.essayGraded);
+    return matchText && matchFilter;
+  });
+  renderResultsTable();
+}
+
+function renderResultsTable() {
+  const tbody = document.getElementById('results-tbody');
+  if (!_filteredResults.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Không có kết quả</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _filteredResults.map(r => {
+    const score = r.score !== null && r.score !== '' ? parseFloat(r.score).toFixed(1) : (r.hasEssay && !r.essayGraded ? '<span class="text-yellow-500">Chờ chấm</span>' : '-');
+    const vio = parseInt(r.violationCount) > 0
+      ? `<span class="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs">${r.violationCount}</span>`
+      : '<span class="text-gray-300 text-xs">-</span>';
+    const date = r.submittedAt ? new Date(r.submittedAt).toLocaleString('vi-VN') : '-';
+    return `<tr class="hover:bg-gray-50 border-b">
+      <td class="px-4 py-3 font-medium text-gray-800 text-sm">${esc(r.name)}</td>
+      <td class="px-4 py-3 text-gray-500 text-sm font-mono">${esc(r.cccd)}</td>
+      <td class="px-4 py-3 text-gray-600 text-sm">${esc(r.unit||'')}</td>
+      <td class="px-4 py-3 text-center font-bold text-blue-700">${score}</td>
+      <td class="px-4 py-3 text-gray-500 text-xs">${date}</td>
+      <td class="px-4 py-3 text-center">${vio}</td>
+      <td class="px-4 py-3 text-center">
+        <div class="flex gap-1 justify-center">
+          <button onclick='showDetail(${JSON.stringify(r).replace(/'/g,"&#39;")})' 
+            class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100">Xem</button>
+          ${r.hasEssay && !r.essayGraded ? `<button onclick='openGradeModal(${JSON.stringify(r).replace(/'/g,"&#39;")})' 
+            class="text-xs bg-yellow-50 text-yellow-600 px-2 py-1 rounded hover:bg-yellow-100">Chấm TL</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showDetail(r) {
+  const modal = document.getElementById('detail-modal');
+  const content = document.getElementById('detail-content');
+  const date = r.submittedAt ? new Date(r.submittedAt).toLocaleString('vi-VN') : '-';
+  let html = `<div class="grid grid-cols-2 gap-3 mb-4 text-sm">
+    <div><span class="text-gray-500">Họ tên:</span> <strong>${esc(r.name)}</strong></div>
+    <div><span class="text-gray-500">CCCD:</span> <span class="font-mono">${esc(r.cccd)}</span></div>
+    <div><span class="text-gray-500">Đơn vị:</span> ${esc(r.unit||'-')}</div>
+    <div><span class="text-gray-500">Điểm:</span> <strong class="text-blue-700">${r.score !== null && r.score !== '' ? parseFloat(r.score).toFixed(2) : '-'}</strong></div>
+    <div><span class="text-gray-500">Trắc nghiệm:</span> ${r.correctMC||0}/${r.totalMC||0}</div>
+    <div><span class="text-gray-500">Vi phạm:</span> ${r.violationCount||0}</div>
+    <div><span class="text-gray-500">Nộp lúc:</span> ${date}</div>
+    <div><span class="text-gray-500">Thời gian làm:</span> ${r.durationSeconds ? Math.floor(r.durationSeconds/60)+'m'+r.durationSeconds%60+'s' : '-'}</div>
+  </div>`;
+  if (r.hasEssay && r.essayAnswer) {
+    html += `<div class="mt-3 border-t pt-3">
+      <div class="font-medium text-gray-700 mb-1 text-sm">Bài tự luận:</div>
+      <div class="bg-gray-50 rounded p-3 text-sm text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">${esc(r.essayAnswer)}</div>
+      ${r.essayGraded ? `<div class="mt-2 text-sm"><span class="text-gray-500">Điểm TL:</span> <strong>${r.essayScore}</strong> | ${r.essayComment ? esc(r.essayComment) : ''}</div>` : ''}
+    </div>`;
+  }
+  content.innerHTML = html;
+  modal.classList.remove('hidden');
+}
+
+function openGradeModal(r) {
+  document.getElementById('grade-result-id').value = r.id;
+  document.getElementById('grade-essay-text').textContent = r.essayAnswer || '(Không có bài tự luận)';
+  document.getElementById('grade-score').value = '';
+  document.getElementById('grade-comment').value = '';
+  document.getElementById('grade-modal').classList.remove('hidden');
+}
+
+async function submitGrade() {
+  const token = getToken();
+  const resultId = document.getElementById('grade-result-id').value;
+  const score = parseFloat(document.getElementById('grade-score').value);
+  const comment = document.getElementById('grade-comment').value.trim();
+  if (isNaN(score) || score < 0 || score > 10) { showToast('Điểm phải từ 0-10', 'error'); return; }
+  try {
+    const res = await api('adminGradeEssay', { adminToken: token, resultId, essayScore: score, essayComment: comment });
+    showToast(`Đã chấm! Điểm tổng: ${res.finalScore}`, 'success');
+    closeModal('grade-modal');
+    loadResults();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  }
+}
+
+function exportCSV() {
+  if (!_filteredResults.length) { showToast('Không có dữ liệu', 'error'); return; }
+  const headers = ['Họ tên','CCCD','Điện thoại','Đơn vị','Điểm','TN đúng','Tổng TN','Có TL','Điểm TL','Đã chấm TL','Vi phạm','Thời gian nộp','Thời gian làm(s)'];
+  const rows = _filteredResults.map(r => [
+    r.name,r.cccd,r.phone||'',r.unit||'',
+    r.score!==null&&r.score!==''?parseFloat(r.score).toFixed(2):'',
+    r.correctMC||0,r.totalMC||0,r.hasEssay?'Có':'Không',
+    r.essayScore||'',r.essayGraded?'Có':'Không',
+    r.violationCount||0,r.submittedAt||'',r.durationSeconds||0
+  ]);
+  const bom = '\uFEFF';
+  const csv = bom + [headers,...rows].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ketqua_thi_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+async function syncSheets() {
+  const token = getToken();
+  setLoading('sync-btn', true);
+  try {
+    const res = await api('syncToSheets', { adminToken: token });
+    showToast(res.message || 'Đã đồng bộ!', res.success ? 'success' : 'error');
+  } catch (err) {
+    showToast('Lỗi đồng bộ: ' + err.message, 'error');
+  } finally {
+    setLoading('sync-btn', false);
+  }
+}
+
+// ============================================================
+//  RESET
+// ============================================================
+async function doReset() {
+  const token = getToken();
+  const confirm_text = document.getElementById('reset-confirm').value.trim();
+  if (confirm_text !== 'XAC NHAN RESET') { showToast('Vui lòng nhập đúng xác nhận', 'error'); return; }
+
+  const opts = {
+    results: document.getElementById('reset-results').checked,
+    sessions: document.getElementById('reset-sessions').checked,
+    violations: document.getElementById('reset-violations').checked,
+    users: document.getElementById('reset-users').checked
+  };
+  if (!Object.values(opts).some(Boolean)) { showToast('Chọn ít nhất một loại dữ liệu cần xóa', 'error'); return; }
+
+  if (!confirm('Bạn chắc chắn muốn xóa dữ liệu? Hành động này KHÔNG THỂ hoàn tác!')) return;
+
+  setLoading('reset-btn', true);
+  try {
+    const res = await api('adminReset', { adminToken: token, confirm: 'XAC NHAN RESET', options: opts });
+    showToast(res.message || 'Reset thành công!', 'success');
+    document.getElementById('reset-confirm').value = '';
+    Object.keys(opts).forEach(k => { document.getElementById('reset-'+k).checked = false; });
+    loadOverview();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  } finally {
+    setLoading('reset-btn', false);
+  }
+}
+
+// ============================================================
+//  MODALS
+// ============================================================
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.classList.add('hidden');
+  });
+});
+
+// ============================================================
+//  UTILS
+// ============================================================
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>
